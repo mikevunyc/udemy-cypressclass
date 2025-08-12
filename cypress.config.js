@@ -5,6 +5,7 @@ const browserify = require("@badeball/cypress-cucumber-preprocessor/browserify")
 const sqlServer = require('cypress-sql-server');
 const excelToJson = require('convert-excel-to-json');
 const fs = require('fs');
+const Exceljs = require('exceljs');
 
 async function setupNodeEvents(on, config) {
 
@@ -26,12 +27,44 @@ async function setupNodeEvents(on, config) {
   on('task', {
     excelToJsonConverter(filePath) {
       const result = excelToJson({
-      source: fs.readFileSync(filePath) // fs.readFileSync return a Buffer
+        source: fs.readFileSync(filePath) // fs.readFileSync return a Buffer
       });
+      return config;
     }
   });
   // Make sure to return the config object as it might have been modified by the plugin.
-  return config;
+  on('task', {
+    async writeExcelTest({ searchText, replaceText, change, filePath }) {
+      const workbook = new Exceljs.Workbook();
+      await workbook.xlsx.readFile(filePath)
+      const worksheet = workbook.getWorksheet('Sheet1');
+      const output = await readExcel(worksheet, searchText);
+      const cell = worksheet.getCell(output.row, output.column + change.colChange);
+      cell.value = replaceText;
+      //pending resolved rejected
+      return workbook.xlsx.writeFile(filePath).then(() => {
+        return true;
+      })
+        .catch((error) => {
+          return false;
+        })
+    }
+  })
+}
+
+async function readExcel(worksheet, searchText) {
+  let output = { row: -1, column: -1 };
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell((cell, colNumber) => {
+      if (cell.value === searchText) {
+        output.row = rowNumber;
+        output.column = colNumber;
+      }
+
+    })
+  })
+  return output;
+
 }
 module.exports = defineConfig({
 
@@ -39,16 +72,14 @@ module.exports = defineConfig({
   env: {
     url: "https://rahulshettyacademy.com",
   },
-
-
   retries: {
     runMode: 1,
 
   },
   projectId: "nodpcq",
-
   e2e: {
     setupNodeEvents,
+    experimentalStudio: true,
     specPattern: 'cypress/integration/examples/*.js'
     // specPattern: 'cypress/integration/examples/BDD/*.feature'
   },
